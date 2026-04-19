@@ -1,4 +1,3 @@
-import asyncio
 import html as html_module
 import logging
 import os
@@ -133,23 +132,19 @@ async def health(request):
     return web.Response(text="OK")
 
 
-async def create_app():
-    global telegram_app
-    app = web.Application()
-
-    telegram_app = await init_telegram_app()
-
-    app.router.add_post("/webhook", webhook)
-    app.router.add_get("/health", health)
-
-    return app
+async def on_startup(app):
+    await init_telegram_app()
 
 
 def get_app():
-    return create_app()
+    app = web.Application()
+    app.on_startup.append(on_startup)
+    app.router.add_post("/webhook", webhook)
+    app.router.add_get("/health", health)
+    return app
 
 
 if __name__ == "__main__":
-    app = asyncio.run(create_app())
+    app = get_app()
     port = int(os.getenv("PORT", 5000))
     web.run_app(app, host="0.0.0.0", port=port)
