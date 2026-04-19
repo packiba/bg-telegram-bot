@@ -33,6 +33,8 @@ if not TOKEN:
 ERROR_MESSAGE = "Произошла ошибка. Попробуйте позже."
 API_ERROR = "Сервис временно недоступен. Попробуйте позже."
 
+telegram_app = None
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = str(update.message.from_user.id)
@@ -95,12 +97,32 @@ async def post_shutdown(app) -> None:
         await stress._SESSION.close()
 
 
+async def init_telegram_app():
+    global telegram_app
+    telegram_app = (
+        ApplicationBuilder()
+        .token(TOKEN)
+        .connect_timeout(15)
+        .read_timeout(15)
+        .post_shutdown(post_shutdown)
+        .build()
+    )
+
+    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    telegram_app.add_error_handler(error_handler)
+
+    if WEBHOOK_URL:
+        await telegram_app.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+        logger.info(f"Webhook set to {WEBHOOK_URL}/webhook")
+
+    return telegram_app.Application
+
+
 async def webhook(request):
     try:
-        app = request.app
         update = Update.parse_obj(request.data)
-        if update:
-            await app.process_update(update)
+        if update and telegram_app:
+            await telegram_app.process_update(update)
         return web.Response()
     except Exception as e:
         logger.error(f"Error processing webhook: {e}")
@@ -111,57 +133,23 @@ async def health(request):
     return web.Response(text="OK")
 
 
-async def start_webhook_app():
-    app = (
-        ApplicationBuilder()
-        .token(TOKEN)
-        .connect_timeout(15)
-        .read_timeout(15)
-        .post_shutdown(post_shutdown)
-        .build()
-    )
+async def create_app():
+    global telegram_app
+    app = web.Application()
 
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_error_handler(error_handler)
+    telegram_app = await init_telegram_app()
 
-    if WEBHOOK_URL:
-        await app.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
-        logger.info(f"Webhook set to {WEBHOOK_URL}/webhook")
+    app.router.add_post("/webhook", webhook)
+    app.router.add_get("/health", health)
 
-    runner = web.AppRunner(app.Application)
-    await runner.setup()
-
-    port = int(os.getenv("PORT", 5000))
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-
-    webhook_app = web.Application()
-    webhook_app.app = app.Application
-    webhook_app.router.add_post("/webhook", webhook)
-    webhook_app.router.add_get("/health", health)
-
-    return webhook_app
+    return app
 
 
-def main():
-    import signal
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    app = loop.run_until_complete(start_webhook_app())
-
-    stop_event = asyncio.Event()
-
-    def signal_handler(sig, frame):
-        logger.info(f"Received signal {sig}, shutting down...")
-        stop_event.set()
-
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
-    web.run_app(app, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+def get_app():
+    return create_app()
 
 
 if __name__ == "__main__":
-    main()
+    app = asyncio.run(create_app())
+    port = int(os.getenv("PORT", 5000))
+    web.run_app(app, host="0.0.0.0", port=port)
