@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
+    CommandHandler,
     ContextTypes,
     MessageHandler,
     filters,
@@ -33,6 +34,33 @@ ERROR_MESSAGE = "Произошла ошибка. Попробуйте позж�
 API_ERROR = "Сервис временно недоступен. Попробуйте позже."
 
 telegram_app = None
+
+
+async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(
+        "• /translate — перевод русский - болгарский\n"
+        "• /stress — расстановка ударений\n"
+        "• /examples — примеры использования слов\n\n"
+        "Текущий режим: Перевод"
+    )
+
+
+async def handle_translate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = str(update.message.from_user.id)
+    state.set_user_mode(chat_id, "translate")
+    await update.message.reply_text("Выбран режим «Перевод»")
+
+
+async def handle_stress_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = str(update.message.from_user.id)
+    state.set_user_mode(chat_id, "stress")
+    await update.message.reply_text("Выбран режим «Ударения»")
+
+
+async def handle_examples_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = str(update.message.from_user.id)
+    state.set_user_mode(chat_id, "examples")
+    await update.message.reply_text("Выбран режим «Примеры»")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -107,6 +135,10 @@ async def init_telegram_app():
         .build()
     )
 
+    telegram_app.add_handler(CommandHandler("start", handle_start))
+    telegram_app.add_handler(CommandHandler("translate", handle_translate_cmd))
+    telegram_app.add_handler(CommandHandler("stress", handle_stress_cmd))
+    telegram_app.add_handler(CommandHandler("examples", handle_examples_cmd))
     telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     telegram_app.add_error_handler(error_handler)
 
@@ -119,12 +151,15 @@ async def init_telegram_app():
 
 async def webhook(request):
     try:
+        if not telegram_app:
+            logger.warning("Telegram app not initialized yet")
+            return web.Response(status=503, text="Not ready")
         update = Update.parse_obj(request.data)
-        if update and telegram_app:
+        if update:
             await telegram_app.process_update(update)
         return web.Response()
     except Exception as e:
-        logger.error(f"Error processing webhook: {e}")
+        logger.error(f"Error processing webhook: {e}", exc_info=True)
         return web.Response(status=500)
 
 
