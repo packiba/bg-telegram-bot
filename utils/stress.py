@@ -163,40 +163,57 @@ async def _lookup_word_stress(word: str) -> str:
     if not clean_word:
         return word
 
+    logger.debug(f"[Lookup] Looking up stress for: '{clean_word}'")
+
     html = await _fetch_chitanka_word(clean_word)
     if html:
+        logger.debug(f"[Lookup] Got HTML for '{clean_word}' ({len(html)} bytes)")
         direct = _extract_stressed_from_html(html, clean_word)
         if direct:
+            logger.debug(f"[Lookup] Found direct match: '{direct}'")
             return direct
+        else:
+            logger.debug(f"[Lookup] No direct match found in HTML")
+    else:
+        logger.debug(f"[Lookup] No HTML received for '{clean_word}'")
 
     if html:
         base_path = _extract_base_form_path(html)
         if base_path:
             base_word = base_path.replace("/w/", "")
+            logger.debug(f"[Lookup] Trying base form: '{base_word}'")
             base_html = await _fetch_chitanka_word(base_word)
             if base_html:
                 base_clean = re.sub(r"[^\u0400-\u04ff]", "", base_word.lower())
                 stressed_base = _extract_stressed_from_html(base_html, base_clean)
                 if stressed_base:
+                    logger.debug(f"[Lookup] Found base form stress: '{stressed_base}'")
                     vi = _stressed_vowel_index(stressed_base)
                     if vi >= 0:
                         vowel_idxs = _vowel_positions(clean_word)
                         target_vi = vi if vi < len(vowel_idxs) else len(vowel_idxs) - 1
                         result = _apply_stress(clean_word, target_vi)
+                        logger.debug(f"[Lookup] Applied stress to original word: '{result}'")
                         return result
 
-    logger.warning(f"Stress lookup failed for '{word}'")
+    logger.debug(f"[Lookup] Stress lookup failed for '{word}', returning original")
     return word
 
 
 async def add_stress_to_text(text: str, force_bulgarian: bool = False) -> str:
+    logger.info(f"[Stress] Input text (force_bg={force_bulgarian}): '{text[:100]}...'")
+
     if not force_bulgarian:
         if not re.search(r"LANG:BG", text, re.IGNORECASE):
+            logger.info("[Stress] No LANG:BG marker found, returning original text")
             return text
         text = _LANG_MARKER_RE.sub("", text).strip()
+        logger.info(f"[Stress] After removing LANG:BG: '{text[:100]}...'")
 
     tokens = _TOKEN_RE.split(text)
+    logger.info(f"[Stress] Split into {len(tokens)} tokens")
     processed: list[str] = []
+    words_processed = 0
 
     for i, token in enumerate(tokens):
         if i % 2 == 0:
@@ -204,17 +221,25 @@ async def add_stress_to_text(text: str, force_bulgarian: bool = False) -> str:
             continue
 
         if _count_vowels(token) <= 1:
+            logger.debug(f"[Stress] Skipping '{token}' (≤1 vowel)")
             processed.append(token)
             continue
 
         stressed = await _lookup_word_stress(token)
         if stressed and stressed != token:
+            words_processed += 1
             is_capital = token[0].isupper() and not token[0].islower()
             if is_capital:
-                processed.append(stressed[0].upper() + stressed[1:])
+                result = stressed[0].upper() + stressed[1:]
+                logger.info(f"[Stress] '{token}' → '{result}' (capitalized)")
+                processed.append(result)
             else:
+                logger.info(f"[Stress] '{token}' → '{stressed}'")
                 processed.append(stressed)
         else:
+            logger.debug(f"[Stress] No stress found for '{token}'")
             processed.append(token)
 
-    return "".join(processed)
+    final_result = "".join(processed)
+    logger.info(f"[Stress] Processed {words_processed} words. Result: '{final_result[:100]}...'")
+    return final_result

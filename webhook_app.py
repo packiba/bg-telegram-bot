@@ -40,7 +40,8 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(
         "• /translate — перевод русский - болгарский\n"
         "• /stress — расстановка ударений\n"
-        "• /examples — примеры использования слов\n\n"
+        "• /examples — примеры использования слов\n"
+        "• /toggle_stress — вкл/выкл ударения в переводе\n\n"
         "Текущий режим: Перевод"
     )
 
@@ -61,6 +62,13 @@ async def handle_examples_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     chat_id = str(update.message.from_user.id)
     state.set_user_mode(chat_id, "examples")
     await update.message.reply_text("Выбран режим «Примеры»")
+
+
+async def handle_toggle_stress_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = str(update.message.from_user.id)
+    new_value = state.toggle_stress(chat_id)
+    label = "ВКЛ" if new_value else "ВЫКЛ"
+    await update.message.reply_text(f"Ударения в переводе: {label}")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -85,17 +93,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def handle_translate(chat_id: str, text: str, message) -> None:
+    logger.info(f"[Translate] User {chat_id} requested translation: '{text[:50]}...'")
     result = await openrouter.translate_text(text)
 
     if result == API_ERROR:
         await message.reply_text(result)
         return
 
-    if "LANG:BG" in result.upper() and state.get_stress_enabled(chat_id):
+    logger.info(f"[Translate] Translation result: '{result[:100]}...'")
+
+    is_bulgarian = "LANG:BG" in result.upper()
+    stress_enabled = state.get_stress_enabled(chat_id)
+    logger.info(f"[Translate] is_bulgarian={is_bulgarian}, stress_enabled={stress_enabled}")
+
+    if is_bulgarian and stress_enabled:
+        logger.info(f"[Translate] Applying stress to: '{result[:100]}...'")
         stressed = await stress.add_stress_to_text(result)
+        logger.info(f"[Translate] After stress: '{stressed[:100]}...'")
         result = stressed
+    else:
+        logger.info(f"[Translate] Skipping stress (bg={is_bulgarian}, enabled={stress_enabled})")
 
     result = result.replace("LANG:BG", "").replace("LANG:RU", "").strip()
+    logger.info(f"[Translate] Final result: '{result[:100]}...'")
 
     escaped = html_module.escape(result)
     await message.reply_text(escaped, parse_mode="HTML")
@@ -139,6 +159,7 @@ async def init_telegram_app():
     telegram_app.add_handler(CommandHandler("translate", handle_translate_cmd))
     telegram_app.add_handler(CommandHandler("stress", handle_stress_cmd))
     telegram_app.add_handler(CommandHandler("examples", handle_examples_cmd))
+    telegram_app.add_handler(CommandHandler("toggle_stress", handle_toggle_stress_cmd))
     telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     telegram_app.add_error_handler(error_handler)
 

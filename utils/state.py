@@ -27,7 +27,7 @@ def _init_db() -> None:
             CREATE TABLE IF NOT EXISTS user_modes (
                 chat_id TEXT PRIMARY KEY,
                 mode TEXT NOT NULL DEFAULT 'translate',
-                stress_enabled INTEGER NOT NULL DEFAULT 1,
+                stress_enabled INTEGER NOT NULL DEFAULT 0,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -36,7 +36,7 @@ def _init_db() -> None:
         columns = [row[1] for row in cursor.fetchall()]
         if "stress_enabled" not in columns:
             cursor.execute(
-                "ALTER TABLE user_modes ADD COLUMN stress_enabled INTEGER NOT NULL DEFAULT 1"
+                "ALTER TABLE user_modes ADD COLUMN stress_enabled INTEGER NOT NULL DEFAULT 0"
             )
             logger.info("Added stress_enabled column to user_modes")
         conn.commit()
@@ -128,10 +128,10 @@ def get_stress_enabled(chat_id: str) -> bool:
         conn.close()
         if row:
             return bool(row[0])
-        return True
+        return False
     except sqlite3.Error as e:
         logger.error("Failed to get stress setting for %s: %s", chat_id, e)
-        return True
+        return False
 
 
 def toggle_stress(chat_id: str) -> bool:
@@ -156,7 +156,7 @@ def toggle_stress(chat_id: str) -> bool:
         return new_value
     except sqlite3.Error as e:
         logger.error("Failed to toggle stress for %s: %s", chat_id, e)
-        return True
+        return False
 
 
 _init_db()
