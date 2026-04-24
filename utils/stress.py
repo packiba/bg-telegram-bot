@@ -225,16 +225,19 @@ async def add_stress_to_text(text: str, force_bulgarian: bool = False) -> str:
         logger.info(f"[Stress] After removing LANG:BG: '{text[:100]}...'")
 
     tokens = _TOKEN_RE.split(text)
-    logger.info(f"[Stress] Split into {len(tokens)} tokens")
+    logger.info(f"[Stress] Split into {len(tokens)} tokens: {tokens[:10]}")
     processed: list[str] = []
     words_processed = 0
 
     for i, token in enumerate(tokens):
+        logger.debug(f"[Stress] Token {i}: '{token}' (even={i%2==0})")
         if i % 2 == 0:
             processed.append(token)
             continue
 
-        if _count_vowels(token) <= 1:
+        vowel_count = _count_vowels(token)
+        logger.debug(f"[Stress] Token '{token}' has {vowel_count} vowels")
+        if vowel_count <= 1:
             logger.debug(f"[Stress] Skipping '{token}' (≤1 vowel)")
             processed.append(token)
             continue
