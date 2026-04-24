@@ -159,10 +159,10 @@ _stress_cache: dict[str, str] = {}
 async def _lookup_word_stress(word: str) -> str:
     # Check cache first
     if word in _stress_cache:
-        logger.debug(f"[Lookup] Cache hit for '{word}'")
+        logger.info(f"[Lookup] Cache hit for '{word}': '{_stress_cache[word]}'")
         return _stress_cache[word]
 
-    logger.debug(f"[Lookup] Cache miss for '{word}', fetching...")
+    logger.info(f"[Lookup] Cache miss for '{word}', fetching...")
     stripped = _strip_accents(word)
     if _count_vowels(stripped) <= 1:
         _stress_cache[word] = word
@@ -174,14 +174,14 @@ async def _lookup_word_stress(word: str) -> str:
         _stress_cache[word] = word
         return word
 
-    logger.debug(f"[Lookup] Looking up stress for: '{clean_word}'")
+    logger.info(f"[Lookup] Looking up stress for: '{clean_word}'")
 
     html = await _fetch_chitanka_word(clean_word)
     if html:
-        logger.debug(f"[Lookup] Got HTML for '{clean_word}' ({len(html)} bytes)")
+        logger.info(f"[Lookup] Got HTML for '{clean_word}' ({len(html)} bytes)")
         direct = _extract_stressed_from_html(html, clean_word)
         if direct:
-            logger.debug(f"[Lookup] Found direct match: '{direct}'")
+            logger.info(f"[Lookup] Found direct match: '{direct}'")
             _stress_cache[word] = direct
             return direct
         else:
@@ -209,7 +209,7 @@ async def _lookup_word_stress(word: str) -> str:
                         _stress_cache[word] = result
                         return result
 
-    logger.debug(f"[Lookup] Stress lookup failed for '{word}', returning original")
+    logger.info(f"[Lookup] Stress lookup failed for '{word}', returning original")
     _stress_cache[word] = word
     return word
 
@@ -230,19 +230,21 @@ async def add_stress_to_text(text: str, force_bulgarian: bool = False) -> str:
     words_processed = 0
 
     for i, token in enumerate(tokens):
-        logger.debug(f"[Stress] Token {i}: '{token}' (even={i%2==0})")
+        logger.info(f"[Stress] Token {i}: '{token}' (even={i%2==0})")
         if i % 2 == 0:
             processed.append(token)
             continue
 
         vowel_count = _count_vowels(token)
-        logger.debug(f"[Stress] Token '{token}' has {vowel_count} vowels")
+        logger.info(f"[Stress] Token '{token}' has {vowel_count} vowels")
         if vowel_count <= 1:
-            logger.debug(f"[Stress] Skipping '{token}' (≤1 vowel)")
+            logger.info(f"[Stress] Skipping '{token}' (≤1 vowel)")
             processed.append(token)
             continue
 
+        logger.info(f"[Stress] Looking up stress for '{token}'...")
         stressed = await _lookup_word_stress(token)
+        logger.info(f"[Stress] Lookup returned: '{stressed}' (changed={stressed != token})")
         if stressed and stressed != token:
             words_processed += 1
             is_capital = token[0].isupper() and not token[0].islower()
@@ -254,7 +256,7 @@ async def add_stress_to_text(text: str, force_bulgarian: bool = False) -> str:
                 logger.info(f"[Stress] '{token}' → '{stressed}'")
                 processed.append(stressed)
         else:
-            logger.debug(f"[Stress] No stress found for '{token}'")
+            logger.info(f"[Stress] No change for '{token}', using original")
             processed.append(token)
 
     final_result = "".join(processed)
