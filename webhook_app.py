@@ -142,6 +142,11 @@ async def init_telegram_app():
     telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     telegram_app.add_error_handler(error_handler)
 
+    # Initialize the application
+    await telegram_app.initialize()
+    await telegram_app.start()
+    logger.info("Telegram app initialized and started")
+
     if WEBHOOK_URL:
         await telegram_app.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
         logger.info(f"Webhook set to {WEBHOOK_URL}/webhook")
@@ -174,9 +179,17 @@ async def on_startup(app):
     await init_telegram_app()
 
 
+async def on_shutdown(app):
+    if telegram_app:
+        logger.info("Stopping telegram app...")
+        await telegram_app.stop()
+        await telegram_app.shutdown()
+
+
 def get_app():
     app = web.Application()
     app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
     app.router.add_post("/webhook", webhook)
     app.router.add_get("/health", health)
     return app
