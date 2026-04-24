@@ -152,15 +152,26 @@ def _extract_base_form_path(html: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
-@functools.lru_cache(maxsize=5000)
+# Simple in-memory cache for word stress lookups
+_stress_cache: dict[str, str] = {}
+
+
 async def _lookup_word_stress(word: str) -> str:
+    # Check cache first
+    if word in _stress_cache:
+        logger.debug(f"[Lookup] Cache hit for '{word}'")
+        return _stress_cache[word]
+
+    logger.debug(f"[Lookup] Cache miss for '{word}', fetching...")
     stripped = _strip_accents(word)
     if _count_vowels(stripped) <= 1:
+        _stress_cache[word] = word
         return word
 
     clean_lower = stripped.lower()
     clean_word = re.sub(r"[^\u0400-\u04ff]", "", clean_lower)
     if not clean_word:
+        _stress_cache[word] = word
         return word
 
     logger.debug(f"[Lookup] Looking up stress for: '{clean_word}'")
@@ -171,6 +182,7 @@ async def _lookup_word_stress(word: str) -> str:
         direct = _extract_stressed_from_html(html, clean_word)
         if direct:
             logger.debug(f"[Lookup] Found direct match: '{direct}'")
+            _stress_cache[word] = direct
             return direct
         else:
             logger.debug(f"[Lookup] No direct match found in HTML")
@@ -194,9 +206,11 @@ async def _lookup_word_stress(word: str) -> str:
                         target_vi = vi if vi < len(vowel_idxs) else len(vowel_idxs) - 1
                         result = _apply_stress(clean_word, target_vi)
                         logger.debug(f"[Lookup] Applied stress to original word: '{result}'")
+                        _stress_cache[word] = result
                         return result
 
     logger.debug(f"[Lookup] Stress lookup failed for '{word}', returning original")
+    _stress_cache[word] = word
     return word
 
 
