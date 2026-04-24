@@ -114,13 +114,19 @@ async def _fetch_chitanka_word(word: str) -> Optional[str]:
     try:
         session = await _get_session()
         url = f"{_CHITANKA_BASE}/w/{word}"
+        logger.info(f"[Fetch] Requesting: {url}")
         timeout = aiohttp.ClientTimeout(total=10)
         async with session.get(url, timeout=timeout) as resp:
+            logger.info(f"[Fetch] Response status: {resp.status}")
             if resp.status == 200:
-                return await resp.text()
-            return None
+                html = await resp.text()
+                logger.info(f"[Fetch] Got HTML: {len(html)} bytes")
+                return html
+            else:
+                logger.info(f"[Fetch] Non-200 status, returning None")
+                return None
     except Exception as e:
-        logger.warning(f"HTTP fetch failed for '{word}': {e}")
+        logger.warning(f"[Fetch] HTTP fetch failed for '{word}': {e}")
         return None
 
 
