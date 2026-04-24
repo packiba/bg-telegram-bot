@@ -201,10 +201,21 @@ async def on_startup(app):
 
 
 async def on_shutdown(app):
+    logger.info("Shutting down application...")
+
+    # Close HTTP sessions first
+    logger.info("Closing aiohttp sessions...")
+    await openrouter._close_session()
+    if stress._SESSION and not stress._SESSION.closed:
+        await stress._SESSION.close()
+
+    # Then stop telegram app
     if telegram_app:
         logger.info("Stopping telegram app...")
         await telegram_app.stop()
         await telegram_app.shutdown()
+
+    logger.info("Shutdown complete")
 
 
 def get_app():
