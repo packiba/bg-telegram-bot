@@ -116,7 +116,16 @@ async def _fetch_chitanka_word(word: str) -> Optional[str]:
         url = f"{_CHITANKA_BASE}/w/{word}"
         logger.info(f"[Fetch] Requesting: {url}")
         timeout = aiohttp.ClientTimeout(total=10)
-        async with session.get(url, timeout=timeout) as resp:
+
+        # Add browser-like headers to avoid 403 Forbidden
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "bg,en-US;q=0.7,en;q=0.3",
+            "Referer": "https://rechnik.chitanka.info/",
+        }
+
+        async with session.get(url, timeout=timeout, headers=headers) as resp:
             logger.info(f"[Fetch] Response status: {resp.status}")
             if resp.status == 200:
                 html = await resp.text()
