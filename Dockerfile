@@ -9,4 +9,4 @@ COPY . .
 
 RUN mkdir -p data
 
-CMD ["python", "webhook_app.py"]
+CMD gunicorn wsgi:application --bind 0.0.0.0:${PORT:-5000} --worker-class aiohttp.GunicornWebWorker --workers 1 --timeout 120

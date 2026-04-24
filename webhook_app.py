@@ -146,7 +146,7 @@ async def init_telegram_app():
         await telegram_app.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
         logger.info(f"Webhook set to {WEBHOOK_URL}/webhook")
 
-    return telegram_app.Application
+    return telegram_app
 
 
 async def webhook(request):
@@ -154,7 +154,10 @@ async def webhook(request):
         if not telegram_app:
             logger.warning("Telegram app not initialized yet")
             return web.Response(status=503, text="Not ready")
-        update = Update.parse_obj(request.data)
+
+        data = await request.json()
+        update = Update.de_json(data, telegram_app.bot)
+
         if update:
             await telegram_app.process_update(update)
         return web.Response()
