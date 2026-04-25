@@ -19,6 +19,7 @@ COMBINING_ACUTE = "\u0301"
 COMBINING_RANGE = ("\u0300", "\u036f")
 
 _CHITANKA_BASE = "https://rechnik.chitanka.info"
+_WIKTIONARY_API = "https://bg.wiktionary.org/w/api.php"
 _SESSION: Optional[aiohttp.ClientSession] = None
 
 _TOKEN_RE = re.compile(r"([\u0400-\u04ff]+(?:['-][\u0400-\u04ff]+)*)", re.UNICODE)
@@ -108,6 +109,45 @@ async def _get_session() -> aiohttp.ClientSession:
     if _SESSION is None or _SESSION.closed:
         _SESSION = aiohttp.ClientSession()
     return _SESSION
+
+
+async def _fetch_wiktionary_word(word: str) -> Optional[str]:
+    """Fetch word stress from Wiktionary API."""
+    try:
+        session = await _get_session()
+        url = f"{_WIKTIONARY_API}?action=parse&page={word}&format=json&prop=wikitext"
+        logger.info(f"[Fetch] Requesting Wiktionary: {url}")
+
+        headers = {
+            "User-Agent": "Bulgarian Telegram Bot/1.0",
+        }
+
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with session.get(url, timeout=timeout, headers=headers) as resp:
+            logger.info(f"[Fetch] Wiktionary response status: {resp.status}")
+            if resp.status == 200:
+                data = await resp.json()
+
+                # Extract wikitext
+                if "parse" in data and "wikitext" in data["parse"]:
+                    wikitext = data["parse"]["wikitext"]["*"]
+                    logger.info(f"[Fetch] Got wikitext: {len(wikitext)} chars")
+
+                    # Look for ЗНАЧЕНИЕ field with stressed word
+                    import re
+                    match = re.search(r"ЗНАЧЕНИЕ\s*=\s*'''([^']+)'''", wikitext)
+                    if match:
+                        stressed_word = match.group(1)
+                        logger.info(f"[Fetch] Found stressed word in wikitext: '{stressed_word}'")
+                        return stressed_word
+
+                return None
+            else:
+                logger.info(f"[Fetch] Non-200 status from Wiktionary")
+                return None
+    except Exception as e:
+        logger.warning(f"[Fetch] Wiktionary fetch failed for '{word}': {e}")
+        return None
 
 
 async def _fetch_chitanka_word(word: str) -> Optional[str]:
@@ -200,6 +240,15 @@ async def _lookup_word_stress(word: str) -> str:
 
     logger.info(f"[Lookup] Looking up stress for: '{clean_word}'")
 
+    # 1. Try Wiktionary first (no IP blocking)
+    wiktionary_result = await _fetch_wiktionary_word(clean_word)
+    if wiktionary_result:
+        logger.info(f"[Lookup] Found in Wiktionary: '{wiktionary_result}'")
+        _stress_cache[word] = wiktionary_result
+        return wiktionary_result
+
+    # 2. Fallback to Chitanka (may be blocked on Render)
+    logger.info(f"[Lookup] Not in Wiktionary, trying Chitanka...")
     html = await _fetch_chitanka_word(clean_word)
     if html:
         logger.info(f"[Lookup] Got HTML for '{clean_word}' ({len(html)} bytes)")
