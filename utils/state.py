@@ -13,9 +13,9 @@ DEFAULT_MODE = "translate"
 # Examples style settings
 STYLE_CYCLE = ["polite", "casual", "explicit"]
 STYLE_LABELS = {
-    "polite": "🟢 Вежливый",
-    "casual": "🟡 Разговорный",
-    "explicit": "🔴 Грубый"
+    "polite": "Вежливый",
+    "casual": "Разговорный",
+    "explicit": "Грубый"
 }
 DEFAULT_STYLE = "casual"
 
@@ -27,9 +27,9 @@ TEMPERATURE_MAP = {
     "high": 0.9
 }
 TEMPERATURE_LABELS = {
-    "low": "❄️ Низкая",
-    "medium": "🌡️ Средняя",
-    "high": "🔥 Высокая"
+    "low": "Низкая",
+    "medium": "Средняя",
+    "high": "Высокая"
 }
 DEFAULT_TEMPERATURE = "medium"
 

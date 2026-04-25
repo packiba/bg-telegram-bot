@@ -38,11 +38,9 @@ telegram_app = None
 
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "• /translate — перевод русский - болгарский\n"
-        "• /stress — расстановка ударений\n"
-        "• /examples — примеры использования слов\n"
-        "• /toggle_stress — вкл/выкл ударения в переводе\n\n"
-        "Текущий режим: Перевод"
+        "/translate — перевод русский - болгарский\n"
+        "/stress — расстановка ударений\n"
+        "/examples — примеры использования слов"
     )
 
 
@@ -98,7 +96,7 @@ async def handle_settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     stress_label = "ВКЛ" if settings["stress_enabled"] else "ВЫКЛ"
 
     message = (
-        "⚙️ Настройки бота\n\n"
+        "Настройки бота\n\n"
         f"Режим работы: {mode_label}\n"
         f"Ударения в переводе: {stress_label}\n\n"
         f"Стиль примеров: {settings['examples_style_label']}\n"
