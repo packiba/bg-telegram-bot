@@ -102,7 +102,7 @@ async def handle_settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"Стиль примеров: {settings['examples_style_label']}\n"
         f"Креативность: {settings['temperature_label']}\n\n"
         "Команды:\n"
-        "/toggle-stress — изменить режим ударений\n"
+        "/toggle_stress — изменить режим ударений\n"
         "/examples_style — изменить стиль примеров\n"
         "/creativity — изменить креативность"
     )
