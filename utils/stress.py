@@ -20,7 +20,6 @@ COMBINING_ACUTE = "\u0301"
 COMBINING_RANGE = ("\u0300", "\u036f")
 
 _CHITANKA_BASE = "https://rechnik.chitanka.info"
-_WIKTIONARY_API = "https://bg.wiktionary.org/w/api.php"
 _CLOUDFLARE_WORKER_URL = os.getenv("CLOUDFLARE_WORKER_URL")
 _SESSION: Optional[aiohttp.ClientSession] = None
 
@@ -111,58 +110,6 @@ async def _get_session() -> aiohttp.ClientSession:
     if _SESSION is None or _SESSION.closed:
         _SESSION = aiohttp.ClientSession()
     return _SESSION
-
-
-async def _fetch_wiktionary_word(word: str) -> Optional[str]:
-    """Fetch word stress from Wiktionary API (via Cloudflare Worker if available)."""
-    try:
-        session = await _get_session()
-
-        # Use Cloudflare Worker proxy if configured
-        if _CLOUDFLARE_WORKER_URL:
-            url = f"{_CLOUDFLARE_WORKER_URL}?word={word}&source=wiktionary"
-            logger.info(f"[Fetch] Requesting via Cloudflare Worker: {url}")
-            headers = {}  # Worker handles headers
-        else:
-            # Fallback to direct request (may be blocked on Render)
-            url = f"{_WIKTIONARY_API}?action=parse&page={word}&format=json&prop=wikitext"
-            logger.info(f"[Fetch] Direct Wiktionary request: {url}")
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "application/json, text/plain, */*",
-                "Accept-Language": "bg,en-US;q=0.7,en;q=0.3",
-                "Accept-Encoding": "gzip, deflate",
-                "DNT": "1",
-                "Connection": "keep-alive",
-                "Referer": "https://bg.wiktionary.org/",
-            }
-
-        timeout = aiohttp.ClientTimeout(total=10)
-        async with session.get(url, timeout=timeout, headers=headers) as resp:
-            logger.info(f"[Fetch] Wiktionary response status: {resp.status}")
-            if resp.status == 200:
-                data = await resp.json()
-
-                # Extract wikitext
-                if "parse" in data and "wikitext" in data["parse"]:
-                    wikitext = data["parse"]["wikitext"]["*"]
-                    logger.info(f"[Fetch] Got wikitext: {len(wikitext)} chars")
-
-                    # Look for ЗНАЧЕНИЕ field with stressed word
-                    import re
-                    match = re.search(r"ЗНАЧЕНИЕ\s*=\s*'''([^']+)'''", wikitext)
-                    if match:
-                        stressed_word = match.group(1)
-                        logger.info(f"[Fetch] Found stressed word in wikitext: '{stressed_word}'")
-                        return stressed_word
-
-                return None
-            else:
-                logger.info(f"[Fetch] Non-200 status from Wiktionary")
-                return None
-    except Exception as e:
-        logger.warning(f"[Fetch] Wiktionary fetch failed for '{word}': {e}")
-        return None
 
 
 async def _fetch_chitanka_word(word: str) -> Optional[str]:
@@ -260,15 +207,7 @@ async def _lookup_word_stress(word: str) -> str:
 
     logger.info(f"[Lookup] Looking up stress for: '{clean_word}'")
 
-    # 1. Try Wiktionary first (no IP blocking)
-    wiktionary_result = await _fetch_wiktionary_word(clean_word)
-    if wiktionary_result:
-        logger.info(f"[Lookup] Found in Wiktionary: '{wiktionary_result}'")
-        _stress_cache[word] = wiktionary_result
-        return wiktionary_result
-
-    # 2. Fallback to Chitanka (may be blocked on Render)
-    logger.info(f"[Lookup] Not in Wiktionary, trying Chitanka...")
+    # Fetch from Chitanka dictionary via Cloudflare Worker
     html = await _fetch_chitanka_word(clean_word)
     if html:
         logger.info(f"[Lookup] Got HTML for '{clean_word}' ({len(html)} bytes)")
