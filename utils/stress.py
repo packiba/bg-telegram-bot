@@ -168,29 +168,34 @@ async def _fetch_wiktionary_word(word: str) -> Optional[str]:
 async def _fetch_chitanka_word(word: str) -> Optional[str]:
     try:
         session = await _get_session()
-        url = f"{_CHITANKA_BASE}/w/{word}"
-        logger.info(f"[Fetch] Requesting: {url}")
+
+        # Use Cloudflare Worker proxy if configured
+        if _CLOUDFLARE_WORKER_URL:
+            url = f"{_CLOUDFLARE_WORKER_URL}?word={word}&source=chitanka"
+            logger.info(f"[Fetch] Requesting via Cloudflare Worker: {url}")
+            headers = {}  # Worker handles headers
+        else:
+            # Fallback to direct request (may be blocked on Render)
+            url = f"{_CHITANKA_BASE}/w/{word}"
+            logger.info(f"[Fetch] Direct Chitanka request: {url}")
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "bg,en-US;q=0.7,en;q=0.3",
+                "Accept-Encoding": "gzip, deflate, br",
+                "DNT": "1",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "same-origin",
+                "Referer": "https://rechnik.chitanka.info/",
+                "Cache-Control": "max-age=0",
+            }
+
         timeout = aiohttp.ClientTimeout(total=10)
-
-        # Add browser-like headers to avoid 403 Forbidden
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "bg,en-US;q=0.7,en;q=0.3",
-            "Accept-Encoding": "gzip, deflate, br",
-            "DNT": "1",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "same-origin",
-            "Referer": "https://rechnik.chitanka.info/",
-            "Cache-Control": "max-age=0",
-        }
-
-        logger.info(f"[Fetch] Headers: User-Agent={headers['User-Agent'][:50]}...")
         async with session.get(url, timeout=timeout, headers=headers) as resp:
-            logger.info(f"[Fetch] Response status: {resp.status}")
+            logger.info(f"[Fetch] Chitanka response status: {resp.status}")
             if resp.status == 200:
                 html = await resp.text()
                 logger.info(f"[Fetch] Got HTML: {len(html)} bytes")
