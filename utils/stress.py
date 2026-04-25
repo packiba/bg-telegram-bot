@@ -119,12 +119,12 @@ async def _fetch_chitanka_word(word: str) -> Optional[str]:
         # Use Cloudflare Worker proxy if configured
         if _CLOUDFLARE_WORKER_URL:
             url = f"{_CLOUDFLARE_WORKER_URL}?word={word}&source=chitanka"
-            logger.info(f"[Fetch] Requesting via Cloudflare Worker: {url}")
+            logger.debug(f"[Fetch] Requesting via Cloudflare Worker: {url}")
             headers = {}  # Worker handles headers
         else:
             # Fallback to direct request (may be blocked on Render)
             url = f"{_CHITANKA_BASE}/w/{word}"
-            logger.info(f"[Fetch] Direct Chitanka request: {url}")
+            logger.debug(f"[Fetch] Direct Chitanka request: {url}")
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -142,13 +142,13 @@ async def _fetch_chitanka_word(word: str) -> Optional[str]:
 
         timeout = aiohttp.ClientTimeout(total=10)
         async with session.get(url, timeout=timeout, headers=headers) as resp:
-            logger.info(f"[Fetch] Chitanka response status: {resp.status}")
+            logger.debug(f"[Fetch] Chitanka response status: {resp.status}")
             if resp.status == 200:
                 html = await resp.text()
-                logger.info(f"[Fetch] Got HTML: {len(html)} bytes")
+                logger.debug(f"[Fetch] Got HTML: {len(html)} bytes")
                 return html
             else:
-                logger.info(f"[Fetch] Non-200 status, returning None")
+                logger.debug(f"[Fetch] Non-200 status, returning None")
                 return None
     except Exception as e:
         logger.warning(f"[Fetch] HTTP fetch failed for '{word}': {e}")
@@ -190,10 +190,10 @@ _stress_cache: dict[str, str] = {}
 async def _lookup_word_stress(word: str) -> str:
     # Check cache first
     if word in _stress_cache:
-        logger.info(f"[Lookup] Cache hit for '{word}': '{_stress_cache[word]}'")
+        logger.debug(f"[Lookup] Cache hit for '{word}': '{_stress_cache[word]}'")
         return _stress_cache[word]
 
-    logger.info(f"[Lookup] Cache miss for '{word}', fetching...")
+    logger.debug(f"[Lookup] Cache miss for '{word}', fetching...")
     stripped = _strip_accents(word)
     if _count_vowels(stripped) <= 1:
         _stress_cache[word] = word
@@ -205,15 +205,15 @@ async def _lookup_word_stress(word: str) -> str:
         _stress_cache[word] = word
         return word
 
-    logger.info(f"[Lookup] Looking up stress for: '{clean_word}'")
+    logger.debug(f"[Lookup] Looking up stress for: '{clean_word}'")
 
     # Fetch from Chitanka dictionary via Cloudflare Worker
     html = await _fetch_chitanka_word(clean_word)
     if html:
-        logger.info(f"[Lookup] Got HTML for '{clean_word}' ({len(html)} bytes)")
+        logger.debug(f"[Lookup] Got HTML for '{clean_word}' ({len(html)} bytes)")
         direct = _extract_stressed_from_html(html, clean_word)
         if direct:
-            logger.info(f"[Lookup] Found direct match: '{direct}'")
+            logger.debug(f"[Lookup] Found direct match: '{direct}'")
             _stress_cache[word] = direct
             return direct
         else:
@@ -241,7 +241,7 @@ async def _lookup_word_stress(word: str) -> str:
                         _stress_cache[word] = result
                         return result
 
-    logger.info(f"[Lookup] Stress lookup failed for '{word}', returning original")
+    logger.debug(f"[Lookup] Stress lookup failed for '{word}', returning original")
     _stress_cache[word] = word
     return word
 
@@ -251,44 +251,44 @@ async def add_stress_to_text(text: str, force_bulgarian: bool = False) -> str:
 
     if not force_bulgarian:
         if not re.search(r"LANG:BG", text, re.IGNORECASE):
-            logger.info("[Stress] No LANG:BG marker found, returning original text")
+            logger.debug("[Stress] No LANG:BG marker found, returning original text")
             return text
         text = _LANG_MARKER_RE.sub("", text).strip()
-        logger.info(f"[Stress] After removing LANG:BG: '{text[:100]}...'")
+        logger.debug(f"[Stress] After removing LANG:BG: '{text[:100]}...'")
 
     tokens = _TOKEN_RE.split(text)
-    logger.info(f"[Stress] Split into {len(tokens)} tokens: {tokens[:10]}")
+    logger.debug(f"[Stress] Split into {len(tokens)} tokens: {tokens[:10]}")
     processed: list[str] = []
     words_processed = 0
 
     for i, token in enumerate(tokens):
-        logger.info(f"[Stress] Token {i}: '{token}' (even={i%2==0})")
+        logger.debug(f"[Stress] Token {i}: '{token}' (even={i%2==0})")
         if i % 2 == 0:
             processed.append(token)
             continue
 
         vowel_count = _count_vowels(token)
-        logger.info(f"[Stress] Token '{token}' has {vowel_count} vowels")
+        logger.debug(f"[Stress] Token '{token}' has {vowel_count} vowels")
         if vowel_count <= 1:
-            logger.info(f"[Stress] Skipping '{token}' (≤1 vowel)")
+            logger.debug(f"[Stress] Skipping '{token}' (≤1 vowel)")
             processed.append(token)
             continue
 
-        logger.info(f"[Stress] Looking up stress for '{token}'...")
+        logger.debug(f"[Stress] Looking up stress for '{token}'...")
         stressed = await _lookup_word_stress(token)
-        logger.info(f"[Stress] Lookup returned: '{stressed}' (changed={stressed != token})")
+        logger.debug(f"[Stress] Lookup returned: '{stressed}' (changed={stressed != token})")
         if stressed and stressed != token:
             words_processed += 1
             is_capital = token[0].isupper() and not token[0].islower()
             if is_capital:
                 result = stressed[0].upper() + stressed[1:]
-                logger.info(f"[Stress] '{token}' → '{result}' (capitalized)")
+                logger.debug(f"[Stress] '{token}' → '{result}' (capitalized)")
                 processed.append(result)
             else:
-                logger.info(f"[Stress] '{token}' → '{stressed}'")
+                logger.debug(f"[Stress] '{token}' → '{stressed}'")
                 processed.append(stressed)
         else:
-            logger.info(f"[Stress] No change for '{token}', using original")
+            logger.debug(f"[Stress] No change for '{token}', using original")
             processed.append(token)
 
     final_result = "".join(processed)

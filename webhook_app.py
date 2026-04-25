@@ -98,10 +98,11 @@ async def handle_settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     message = (
         "Настройки бота\n\n"
         f"Режим работы: {mode_label}\n"
-        f"Ударения в переводе: {stress_label}\n\n"
+        f"Ударения в переводе: {stress_label}\n"
         f"Стиль примеров: {settings['examples_style_label']}\n"
         f"Креативность: {settings['temperature_label']}\n\n"
         "Команды:\n"
+        "/toggle-stress — изменить режим ударений\n"
         "/examples_style — изменить стиль примеров\n"
         "/creativity — изменить креативность"
     )
@@ -131,29 +132,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def handle_translate(chat_id: str, text: str, message) -> None:
-    logger.info(f"[Translate] User {chat_id} requested translation: '{text[:50]}...'")
+    logger.debug(f"[Translate] User {chat_id} requested translation: '{text[:50]}...'")
     result = await openrouter.translate_text(text, chat_id)
 
     if result == API_ERROR:
         await message.reply_text(result)
         return
 
-    logger.info(f"[Translate] Translation result: '{result[:100]}...'")
+    logger.debug(f"[Translate] Translation result: '{result[:100]}...'")
 
     is_bulgarian = "LANG:BG" in result.upper()
     stress_enabled = state.get_stress_enabled(chat_id)
-    logger.info(f"[Translate] is_bulgarian={is_bulgarian}, stress_enabled={stress_enabled}")
+    logger.debug(f"[Translate] is_bulgarian={is_bulgarian}, stress_enabled={stress_enabled}")
 
     if is_bulgarian and stress_enabled:
-        logger.info(f"[Translate] Applying stress to: '{result[:100]}...'")
+        logger.debug(f"[Translate] Applying stress to: '{result[:100]}...'")
         stressed = await stress.add_stress_to_text(result)
-        logger.info(f"[Translate] After stress: '{stressed[:100]}...'")
+        logger.debug(f"[Translate] After stress: '{stressed[:100]}...'")
         result = stressed
     else:
-        logger.info(f"[Translate] Skipping stress (bg={is_bulgarian}, enabled={stress_enabled})")
+        logger.debug(f"[Translate] Skipping stress (bg={is_bulgarian}, enabled={stress_enabled})")
 
     result = result.replace("LANG:BG", "").replace("LANG:RU", "").strip()
-    logger.info(f"[Translate] Final result: '{result[:100]}...'")
+    logger.debug(f"[Translate] Final result: '{result[:100]}...'")
 
     escaped = html_module.escape(result)
     await message.reply_text(escaped, parse_mode="HTML")
