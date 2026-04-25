@@ -4,7 +4,7 @@ import os
 
 from aiohttp import web
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -167,6 +167,16 @@ async def init_telegram_app():
     await telegram_app.initialize()
     await telegram_app.start()
     logger.info("Telegram app initialized and started")
+
+    # Register bot commands in menu
+    await telegram_app.bot.set_my_commands([
+        BotCommand("start", "Запустить бота"),
+        BotCommand("translate", "Перевод русский - болгарский"),
+        BotCommand("stress", "Расстановка ударений"),
+        BotCommand("examples", "Примеры использования слов"),
+        BotCommand("toggle_stress", "Вкл/выкл ударения в переводе"),
+    ])
+    logger.info("Bot commands registered in menu")
 
     if WEBHOOK_URL:
         await telegram_app.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
