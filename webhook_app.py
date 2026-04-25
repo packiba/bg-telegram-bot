@@ -71,6 +71,46 @@ async def handle_toggle_stress_cmd(update: Update, context: ContextTypes.DEFAULT
     await update.message.reply_text(f"Ударения в переводе: {label}")
 
 
+async def handle_examples_style_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = str(update.message.from_user.id)
+    new_style = state.cycle_examples_style(chat_id)
+    label = state.STYLE_LABELS.get(new_style, new_style)
+    await update.message.reply_text(f"Стиль примеров: {label}")
+
+
+async def handle_creativity_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = str(update.message.from_user.id)
+    new_temp = state.cycle_temperature(chat_id)
+    label = state.TEMPERATURE_LABELS.get(new_temp, new_temp)
+    await update.message.reply_text(f"Креативность: {label}")
+
+
+async def handle_settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = str(update.message.from_user.id)
+    settings = state.get_all_settings(chat_id)
+
+    mode_labels = {
+        "translate": "Перевод",
+        "stress": "Ударения",
+        "examples": "Примеры"
+    }
+    mode_label = mode_labels.get(settings["mode"], settings["mode"])
+    stress_label = "ВКЛ" if settings["stress_enabled"] else "ВЫКЛ"
+
+    message = (
+        "⚙️ Настройки бота\n\n"
+        f"Режим работы: {mode_label}\n"
+        f"Ударения в переводе: {stress_label}\n\n"
+        f"Стиль примеров: {settings['examples_style_label']}\n"
+        f"Креативность: {settings['temperature_label']}\n\n"
+        "Команды:\n"
+        "/examples_style — изменить стиль примеров\n"
+        "/creativity — изменить креативность"
+    )
+
+    await update.message.reply_text(message)
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = str(update.message.from_user.id)
     text = update.message.text
@@ -94,7 +134,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def handle_translate(chat_id: str, text: str, message) -> None:
     logger.info(f"[Translate] User {chat_id} requested translation: '{text[:50]}...'")
-    result = await openrouter.translate_text(text)
+    result = await openrouter.translate_text(text, chat_id)
 
     if result == API_ERROR:
         await message.reply_text(result)
@@ -128,7 +168,7 @@ async def handle_stress(chat_id: str, text: str, message) -> None:
 
 
 async def handle_examples(chat_id: str, text: str, message) -> None:
-    result = await openrouter.get_examples(text)
+    result = await openrouter.get_examples(text, chat_id)
     escaped = html_module.escape(result)
     await message.reply_text(escaped, parse_mode="HTML")
 
@@ -160,6 +200,9 @@ async def init_telegram_app():
     telegram_app.add_handler(CommandHandler("stress", handle_stress_cmd))
     telegram_app.add_handler(CommandHandler("examples", handle_examples_cmd))
     telegram_app.add_handler(CommandHandler("toggle_stress", handle_toggle_stress_cmd))
+    telegram_app.add_handler(CommandHandler("examples_style", handle_examples_style_cmd))
+    telegram_app.add_handler(CommandHandler("creativity", handle_creativity_cmd))
+    telegram_app.add_handler(CommandHandler("settings", handle_settings_cmd))
     telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     telegram_app.add_error_handler(error_handler)
 
@@ -175,6 +218,9 @@ async def init_telegram_app():
         BotCommand("stress", "Расстановка ударений"),
         BotCommand("examples", "Примеры использования слов"),
         BotCommand("toggle_stress", "Вкл/выкл ударения в переводе"),
+        BotCommand("examples_style", "Стиль примеров (вежливый/разговорный/грубый)"),
+        BotCommand("creativity", "Креативность (низкая/средняя/высокая)"),
+        BotCommand("settings", "Показать текущие настройки"),
     ])
     logger.info("Bot commands registered in menu")
 

@@ -37,14 +37,39 @@ TRANSLATION_SYSTEM_PROMPT = (
     "комментарии или варианты. Только чистый результат и маркер."
 )
 
-EXAMPLES_SYSTEM_PROMPT = (
-    "Действуй как носитель болгарского языка. Дай 3 коротких, реалистичных "
-    "примера использования слова/фразы. Используй живой разговорный язык, "
-    "сленг или типичные бытовые ситуации (без цензуры здравого смысла и "
-    "излишней вежливости). Примеры должны отражать, как люди реально общаются "
-    "на улице или в кругу друзей. Каждый пример на новой строке, пронумерован. "
+EXAMPLES_PROMPT_POLITE = (
+    "Действуй как преподаватель болгарского языка. Дай 3 коротких примера "
+    "использования слова/фразы в нейтральной литературной речи. "
+    "Используй корректный, вежливый язык без сленга и разговорных выражений. "
+    "Примеры должны быть понятными и подходящими для учебных целей. "
+    "Каждый пример на новой строке, пронумерован. "
     "Только болгарский текст, без лишних пояснений."
 )
+
+EXAMPLES_PROMPT_CASUAL = (
+    "Действуй как носитель болгарского языка. Дай 3 коротких, реалистичных "
+    "примера использования слова/фразы в разговорной речи. Используй естественный "
+    "разговорный язык и типичные бытовые ситуации, включая сленг, "
+    "но избегай грубостей и мата. Примеры должны звучать живо и естественно, "
+    "как в обычном дружеском общении. Каждый пример на новой строке, пронумерован. "
+    "Только болгарский текст, без лишних пояснений."
+)
+
+EXAMPLES_PROMPT_EXPLICIT = (
+    "Действуй как носитель болгарского языка. Дай 3 коротких, реалистичных "
+    "примера использования слова/фразы. Используй живой разговорный язык, "
+    "сленг и типичные бытовые ситуации без ограничений. "
+    "Примеры должны отражать, как люди реально общаются "
+    "на улице или в кругу друзей, включая грубый язык если уместно. "
+    "Каждый пример на новой строке, пронумерован. "
+    "Только болгарский текст, без лишних пояснений."
+)
+
+EXAMPLES_PROMPTS = {
+    "polite": EXAMPLES_PROMPT_POLITE,
+    "casual": EXAMPLES_PROMPT_CASUAL,
+    "explicit": EXAMPLES_PROMPT_EXPLICIT,
+}
 
 ERROR_MESSAGE = "Сервис временно недоступен. Попробуйте позже."
 
@@ -129,7 +154,7 @@ async def _make_request(messages: list[dict], temperature: float) -> Optional[st
     return ERROR_MESSAGE
 
 
-async def translate_text(text: str) -> str:
+async def translate_text(text: str, chat_id: str = None) -> str:
     if not OPENROUTER_API_KEY:
         return ERROR_MESSAGE
 
@@ -138,20 +163,37 @@ async def translate_text(text: str) -> str:
         {"role": "user", "content": text},
     ]
 
-    result = await _make_request(messages, temperature=0.5)
+    # Get temperature from user settings
+    temperature = 0.6  # default
+    if chat_id:
+        from utils import state
+        temperature = state.get_temperature_value(chat_id)
+
+    result = await _make_request(messages, temperature=temperature)
     return result or ERROR_MESSAGE
 
 
-async def get_examples(text: str) -> str:
+async def get_examples(text: str, chat_id: str = None) -> str:
     if not OPENROUTER_API_KEY:
         return ERROR_MESSAGE
 
+    # Get examples style and temperature from user settings
+    style = "casual"  # default
+    temperature = 0.6  # default
+    if chat_id:
+        from utils import state
+        style = state.get_examples_style(chat_id)
+        temperature = state.get_temperature_value(chat_id)
+
+    # Select appropriate prompt based on style
+    prompt = EXAMPLES_PROMPTS.get(style, EXAMPLES_PROMPT_CASUAL)
+
     messages = [
-        {"role": "system", "content": EXAMPLES_SYSTEM_PROMPT},
+        {"role": "system", "content": prompt},
         {"role": "user", "content": text},
     ]
 
-    result = await _make_request(messages, temperature=0.6)
+    result = await _make_request(messages, temperature=temperature)
     if result and result != ERROR_MESSAGE:
         return f"Примеры:\n\n{result}"
     return result or ERROR_MESSAGE
