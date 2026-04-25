@@ -20,6 +20,7 @@ COMBINING_RANGE = ("\u0300", "\u036f")
 
 _CHITANKA_BASE = "https://rechnik.chitanka.info"
 _WIKTIONARY_API = "https://bg.wiktionary.org/w/api.php"
+_CLOUDFLARE_WORKER_URL = os.getenv("CLOUDFLARE_WORKER_URL")
 _SESSION: Optional[aiohttp.ClientSession] = None
 
 _TOKEN_RE = re.compile(r"([\u0400-\u04ff]+(?:['-][\u0400-\u04ff]+)*)", re.UNICODE)
@@ -112,21 +113,28 @@ async def _get_session() -> aiohttp.ClientSession:
 
 
 async def _fetch_wiktionary_word(word: str) -> Optional[str]:
-    """Fetch word stress from Wiktionary API."""
+    """Fetch word stress from Wiktionary API (via Cloudflare Worker if available)."""
     try:
         session = await _get_session()
-        url = f"{_WIKTIONARY_API}?action=parse&page={word}&format=json&prop=wikitext"
-        logger.info(f"[Fetch] Requesting Wiktionary: {url}")
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "bg,en-US;q=0.7,en;q=0.3",
-            "Accept-Encoding": "gzip, deflate",
-            "DNT": "1",
-            "Connection": "keep-alive",
-            "Referer": "https://bg.wiktionary.org/",
-        }
+        # Use Cloudflare Worker proxy if configured
+        if _CLOUDFLARE_WORKER_URL:
+            url = f"{_CLOUDFLARE_WORKER_URL}?word={word}&source=wiktionary"
+            logger.info(f"[Fetch] Requesting via Cloudflare Worker: {url}")
+            headers = {}  # Worker handles headers
+        else:
+            # Fallback to direct request (may be blocked on Render)
+            url = f"{_WIKTIONARY_API}?action=parse&page={word}&format=json&prop=wikitext"
+            logger.info(f"[Fetch] Direct Wiktionary request: {url}")
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "bg,en-US;q=0.7,en;q=0.3",
+                "Accept-Encoding": "gzip, deflate",
+                "DNT": "1",
+                "Connection": "keep-alive",
+                "Referer": "https://bg.wiktionary.org/",
+            }
 
         timeout = aiohttp.ClientTimeout(total=10)
         async with session.get(url, timeout=timeout, headers=headers) as resp:
