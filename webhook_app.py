@@ -62,6 +62,13 @@ async def handle_examples_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text("Выбран режим «Примеры»")
 
 
+async def handle_model_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = str(update.message.from_user.id)
+    new_model = state.cycle_model(chat_id)
+    label = state.get_model_label(chat_id)
+    await update.message.reply_text(f"Модель: {label}")
+
+
 async def handle_toggle_stress_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = str(update.message.from_user.id)
     new_value = state.toggle_stress(chat_id)
@@ -98,10 +105,12 @@ async def handle_settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     message = (
         "Настройки бота\n\n"
         f"Режим работы: {mode_label}\n"
+        f"Модель: {settings['model_label']}\n"
         f"Ударения в переводе: {stress_label}\n"
         f"Стиль примеров: {settings['examples_style_label']}\n"
         f"Креативность: {settings['temperature_label']}\n\n"
         "Команды:\n"
+        "/model — выбор модели\n"
         "/toggle_stress — изменить режим ударений\n"
         "/examples_style — изменить стиль примеров\n"
         "/creativity — изменить креативность"
@@ -198,6 +207,7 @@ async def init_telegram_app():
     telegram_app.add_handler(CommandHandler("translate", handle_translate_cmd))
     telegram_app.add_handler(CommandHandler("stress", handle_stress_cmd))
     telegram_app.add_handler(CommandHandler("examples", handle_examples_cmd))
+    telegram_app.add_handler(CommandHandler("model", handle_model_cmd))
     telegram_app.add_handler(CommandHandler("toggle_stress", handle_toggle_stress_cmd))
     telegram_app.add_handler(CommandHandler("examples_style", handle_examples_style_cmd))
     telegram_app.add_handler(CommandHandler("creativity", handle_creativity_cmd))
@@ -217,6 +227,7 @@ async def init_telegram_app():
         BotCommand("stress", "Расстановка ударений"),
         BotCommand("examples", "Примеры использования слов"),
         BotCommand("toggle_stress", "Вкл/выкл ударения в переводе"),
+        BotCommand("model", "Выбор модели"),
         BotCommand("examples_style", "Стиль примеров (вежливый/разговорный/грубый)"),
         BotCommand("creativity", "Креативность (низкая/средняя/высокая)"),
         BotCommand("settings", "Показать текущие настройки"),

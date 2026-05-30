@@ -33,6 +33,17 @@ TEMPERATURE_LABELS = {
 }
 DEFAULT_TEMPERATURE = "medium"
 
+# Model settings
+MODELS = [
+    ("google/gemini-3-flash-preview", "Gemini 3 Flash (paid)"),
+    ("google/gemma-4-31b-it:free", "Gemma 4 31B (free)"),
+    ("deepseek/deepseek-v4-flash:free", "DeepSeek V4 Flash (free)"),
+    ("meta-llama/llama-3.3-70b-instruct:free", "Llama 3.3 70B (free)"),
+]
+MODEL_KEYS = [m[0] for m in MODELS]
+MODEL_LABELS = dict(MODELS)
+DEFAULT_MODEL = "google/gemini-3-flash-preview"
+
 
 def _get_db_path() -> Path:
     db_path = os.getenv("DATABASE_PATH", "data/bot.db")
@@ -74,6 +85,11 @@ def _init_db() -> None:
                 "ALTER TABLE user_modes ADD COLUMN temperature TEXT NOT NULL DEFAULT 'medium'"
             )
             logger.info("Added temperature column to user_modes")
+        if "model" not in columns:
+            cursor.execute(
+                "ALTER TABLE user_modes ADD COLUMN model TEXT NOT NULL DEFAULT 'google/gemini-3-flash-preview'"
+            )
+            logger.info("Added model column to user_modes")
         conn.commit()
         conn.close()
         logger.debug("Database initialized at %s", db_path)
@@ -291,11 +307,63 @@ def cycle_temperature(chat_id: str) -> str:
         return DEFAULT_TEMPERATURE
 
 
+@lru_cache(maxsize=1024)
+def get_model(chat_id: str) -> str:
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT model FROM user_modes WHERE chat_id = ?", (chat_id,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return row[0]
+        return DEFAULT_MODEL
+    except sqlite3.Error as e:
+        logger.error("Failed to get model for %s: %s", chat_id, e)
+        return DEFAULT_MODEL
+
+
+def get_model_label(chat_id: str) -> str:
+    model = get_model(chat_id)
+    return MODEL_LABELS.get(model, model)
+
+
+def cycle_model(chat_id: str) -> str:
+    try:
+        current = get_model(chat_id)
+        current_index = MODEL_KEYS.index(current) if current in MODEL_KEYS else 0
+        next_index = (current_index + 1) % len(MODEL_KEYS)
+        new_model = MODEL_KEYS[next_index]
+
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE user_modes SET model = ?, updated_at = CURRENT_TIMESTAMP WHERE chat_id = ?",
+            (new_model, chat_id),
+        )
+        if cursor.rowcount == 0:
+            cursor.execute(
+                "INSERT OR REPLACE INTO user_modes (chat_id, mode, model, updated_at) VALUES (?, 'translate', ?, CURRENT_TIMESTAMP)",
+                (chat_id, new_model),
+            )
+        conn.commit()
+        conn.close()
+        get_model.cache_clear()
+        logger.debug("Set model to %s for user %s", new_model, chat_id)
+        return new_model
+    except sqlite3.Error as e:
+        logger.error("Failed to cycle model for %s: %s", chat_id, e)
+        return DEFAULT_MODEL
+
+
 def get_all_settings(chat_id: str) -> dict:
     mode = get_user_mode(chat_id)
     stress = get_stress_enabled(chat_id)
     style = get_examples_style(chat_id)
     temp = get_temperature(chat_id)
+    model = get_model(chat_id)
 
     return {
         "mode": mode,
@@ -304,6 +372,8 @@ def get_all_settings(chat_id: str) -> dict:
         "examples_style_label": STYLE_LABELS.get(style, style),
         "temperature": temp,
         "temperature_label": TEMPERATURE_LABELS.get(temp, temp),
+        "model": model,
+        "model_label": MODEL_LABELS.get(model, model),
     }
 
 

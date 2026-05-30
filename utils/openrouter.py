@@ -26,13 +26,16 @@ TRANSLATION_SYSTEM_PROMPT = (
     "2. Качество перевода: Избегай дословных калек и буквализма. "
     "Используй естественные для носителей устойчивые выражения, идиомы и "
     "фразеологизмы. Перевод должен звучать так, будто его написал местный житель.\n\n"
-    "3. Контекст и эмоции: Полностью сохраняй эмоциональный окрас и стиль "
+     "3. Грамматика: Строго сохраняй вид глагола (совершенный/несовершенный) "
+    "при переводе. Если в оригинале глагол совершенного вида, в переводе "
+    "он также должен быть совершенного вида, и наоборот.\n\n"
+    "4. Контекст и эмоции: Полностью сохраняй эмоциональный окрас и стиль "
     "оригинала. Если фраза двусмысленна, выбирай наиболее часто используемый "
     "разговорный вариант.\n\n"
-    "4. Язык вывода: ВАЖНО — если переводишь на болгарский, добавь в конце "
+    "5. Язык вывода: ВАЖНО — если переводишь на болгарский, добавь в конце "
     "ответа на новой строке маркер: LANG:BG. Если переводишь на русский — "
     "маркер: LANG:RU.\n\n"
-    "5. Формат ответа: Присылай ТОЛЬКО текст перевода и маркер языка. "
+    "6. Формат ответа: Присылай ТОЛЬКО текст перевода и маркер языка. "
     "Строго запрещено добавлять кавычки, пояснения (типа «Перевод:»), "
     "комментарии или варианты. Только чистый результат и маркер."
 )
@@ -99,7 +102,7 @@ def _extract_response(data: dict) -> Optional[str]:
         return None
 
 
-async def _make_request(messages: list[dict], temperature: float) -> Optional[str]:
+async def _make_request(messages: list[dict], temperature: float, model: Optional[str] = None) -> Optional[str]:
     max_retries = 3
     for attempt in range(max_retries + 1):
         if attempt > 0:
@@ -116,7 +119,7 @@ async def _make_request(messages: list[dict], temperature: float) -> Optional[st
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": OPENROUTER_MODEL,
+                    "model": model or OPENROUTER_MODEL,
                     "messages": messages,
                     "temperature": temperature,
                 },
@@ -163,13 +166,15 @@ async def translate_text(text: str, chat_id: str = None) -> str:
         {"role": "user", "content": text},
     ]
 
-    # Get temperature from user settings
+    # Get temperature and model from user settings
     temperature = 0.6  # default
+    model = None
     if chat_id:
         from utils import state
         temperature = state.get_temperature_value(chat_id)
+        model = state.get_model(chat_id)
 
-    result = await _make_request(messages, temperature=temperature)
+    result = await _make_request(messages, temperature=temperature, model=model)
     return result or ERROR_MESSAGE
 
 
@@ -177,13 +182,15 @@ async def get_examples(text: str, chat_id: str = None) -> str:
     if not OPENROUTER_API_KEY:
         return ERROR_MESSAGE
 
-    # Get examples style and temperature from user settings
+    # Get examples style, temperature and model from user settings
     style = "casual"  # default
     temperature = 0.6  # default
+    model = None
     if chat_id:
         from utils import state
         style = state.get_examples_style(chat_id)
         temperature = state.get_temperature_value(chat_id)
+        model = state.get_model(chat_id)
 
     # Select appropriate prompt based on style
     prompt = EXAMPLES_PROMPTS.get(style, EXAMPLES_PROMPT_CASUAL)
@@ -193,7 +200,7 @@ async def get_examples(text: str, chat_id: str = None) -> str:
         {"role": "user", "content": text},
     ]
 
-    result = await _make_request(messages, temperature=temperature)
+    result = await _make_request(messages, temperature=temperature, model=model)
     if result and result != ERROR_MESSAGE:
         return f"Примеры:\n\n{result}"
     return result or ERROR_MESSAGE
